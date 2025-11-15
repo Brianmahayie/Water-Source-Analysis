@@ -1,5 +1,5 @@
 ---
-title: "`r paste('Water Source Survey Analysis -', tools::toTitleCase(params$selected_month))`"
+title: "Water Source Survey Analysis"
 output: 
   html_document:
     toc: true
@@ -60,7 +60,6 @@ kobo_data <- kobo_data %>%
   select(-any_of("uuid"))%>%
   mutate(start_time = ymd_hms(start_time, tz = "UTC"))%>%
   mutate(end_time = ymd_hms(end_time, tz = "UTC"))%>%
-  filter(as.character(month) == params$selected_month)%>%
   filter(consent == "yes")  # Filter for consented responses
 
 # Convert variable types based on ODK form structure
@@ -78,8 +77,8 @@ kobo_data <- kobo_data %>%
 kobo_data <- kobo_data %>%
   mutate(
     surveyor_name = factor(surveyor_name,
-                          levels = c("abdulaib", "abdulaik", "boboieh", "jamiatu", "musa", "joana", "other"),
-                          labels = c("Abdulai B", "Abdulai K", "Boboieh", "Jamiatu", "Musa", "Joana", "Other")),
+                          levels = c("abdulaib", "abdulaik", "boboieh", "jamiatu", "musa", "joana", "moses", "joseph", "other"),
+                          labels = c("Abdulai B", "Abdulai K", "Boboieh", "Jamiatu", "Musa", "Joana", "Moses", "Joseph", "Other")),
     
     # community
     community = factor(community,
@@ -211,7 +210,8 @@ kobo_data <- kobo_data %>%
     price_per_month = as.numeric(price_per_month),
     percent_women_gatherers = as.numeric(percent_women_gatherers)
   )%>%
-  select(-c(consent,picture_consent,`_version__`, audit, instanceID,instanceName, xform_id_string, rootUuid, status, geolocation, submission_time, tags, notes, submitted_by, source_ID, quoting:end))
+  select(-c(consent,picture_consent,`_version__`, audit, instanceID,instanceName, xform_id_string, rootUuid, status, geolocation, submission_time, tags, notes, submitted_by, source_ID, quoting:end))%>%
+  filter(is.na(source_photo) == F)
 ```
 
 ## Manual Data Corrections
