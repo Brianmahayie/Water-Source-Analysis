@@ -9,7 +9,6 @@ output:
     toc_depth: 2
     code_folding: hide
     theme: flatly
-date: "`r Sys.Date()`"
 ---
 
 # Prelimiary Work

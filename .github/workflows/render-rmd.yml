@@ -1,10 +1,8 @@
 name: Render and Deploy R Markdown
-
 on:
   schedule:
     - cron: '0 20 * * *'  # 8 PM GMT (Sierra Leone time) daily
   workflow_dispatch:  # Allows manual triggering
-
 jobs:
   render:
     runs-on: ubuntu-latest
@@ -27,15 +25,29 @@ jobs:
         uses: actions/cache@v3
         with:
           path: ${{ env.R_LIBS_USER }}
-          key: ${{ runner.os }}-r-${{ hashFiles('**/render-rmd.yml') }}
+          key: ${{ runner.os }}-r-packages-v1
           restore-keys: |
             ${{ runner.os }}-r-
       
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libcurl4-openssl-dev libssl-dev libxml2-dev \
-            libgdal-dev libgeos-dev libproj-dev libudunits2-dev
+          sudo apt-get install -y \
+            libcurl4-openssl-dev \
+            libssl-dev \
+            libxml2-dev \
+            libgdal-dev \
+            libgeos-dev \
+            libproj-dev \
+            libudunits2-dev \
+            libmagick++-dev \
+            libfontconfig1-dev \
+            libfreetype6-dev \
+            libpng-dev \
+            libtiff5-dev \
+            libjpeg-dev \
+            libharfbuzz-dev \
+            libfribidi-dev
       
       - name: Install R packages
         run: |
@@ -45,7 +57,7 @@ jobs:
         env:
           KOBO_TOKEN: ${{ secrets.KOBO_TOKEN }}
         run: |
-          Rscript -e 'rmarkdown::render("Water Source Analysis.Rmd", output_file = "index.html", output_dir = ".")'
+          Rscript -e 'Sys.setenv(RSTUDIO_PANDOC="/usr/bin"); rmarkdown::render("Water Source Analysis.Rmd", output_file = "index.html", output_dir = ".")'
       
       - name: Commit and push HTML
         run: |
