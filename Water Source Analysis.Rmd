@@ -10,15 +10,6 @@ output:
     code_folding: hide
     theme: flatly
 date: "`r Sys.Date()`"
-params:
-  selected_month: "november"
-knit: (function(input, encoding) {
-    rmarkdown::render(
-      input,
-      output_file = paste0('water_source_analysis_', rmarkdown::yaml_front_matter(input)$params$selected_month, '.html'),
-      encoding = encoding
-    )
-  })
 ---
 
 # Prelimiary Work

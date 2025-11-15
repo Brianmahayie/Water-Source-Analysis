@@ -22,3 +22,4 @@
 
 # Explicitly ignore sensitive files
 .Renviron
+.Rproj.user
