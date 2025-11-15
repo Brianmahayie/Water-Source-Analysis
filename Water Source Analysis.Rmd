@@ -25,10 +25,10 @@ library(httr)
 library(jsonlite)
 library(kableExtra)
 library(magick)
-library(httr)
 library(sf)
 library(ggplot2)
 library(ggspatial)
+library(gridExtra)
 
 # Replace with your actual token and form ID
 kobo_token <- Sys.getenv("KOBO_TOKEN")
@@ -899,8 +899,6 @@ access_rights_with_total %>%
 ## Price Per Jerry Can
 
 ```{r fig.width=10, fig.height=8}
-library(gridExtra)
-
 # Create histogram for each community
 cockle_plot <- kobo_data %>%
   filter(community == "Cockle Bay", !is.na(price_per_jerrycan)) %>%
@@ -1143,7 +1141,7 @@ treatment_frequency_with_total %>%
 ## Percent Women Gatherers
 
 ```{r fig.width=10, fig.height=8}
-library(gridExtra)
+
 
 # Create histogram for each community
 cockle_plot <- kobo_data %>%

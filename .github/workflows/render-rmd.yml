@@ -51,7 +51,7 @@ jobs:
       
       - name: Install R packages
         run: |
-          Rscript -e 'install.packages(c("rmarkdown", "knitr", "tidyverse", "lubridate", "scales", "httr", "jsonlite", "kableExtra", "magick", "sf", "ggspatial", "gridExtra"))'
+         Rscript -e 'install.packages(c("rmarkdown", "knitr", "tidyverse", "lubridate", "scales", "httr", "jsonlite", "kableExtra", "magick", "sf", "ggplot2", "ggspatial", "prettymapr", "gridExtra"))'
       
       - name: Render R Markdown
         env:
