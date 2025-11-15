@@ -1,0 +1,1322 @@
+---
+title: "`r paste('Water Source Survey Analysis -', tools::toTitleCase(params$selected_month))`"
+output: 
+  html_document:
+    toc: true
+    toc_float: 
+      collapsed: false
+      smooth_scroll: true
+    toc_depth: 2
+    code_folding: hide
+    theme: flatly
+date: "`r Sys.Date()`"
+params:
+  selected_month: "november"
+knit: (function(input, encoding) {
+    rmarkdown::render(
+      input,
+      output_file = paste0('water_source_analysis_', rmarkdown::yaml_front_matter(input)$params$selected_month, '.html'),
+      encoding = encoding
+    )
+  })
+---
+
+# Prelimiary Work
+
+## Data Setup
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+library(tidyverse)
+library(lubridate)
+library(knitr)
+library(scales)
+library(httr)
+library(jsonlite)
+library(kableExtra)
+library(magick)
+library(httr)
+library(sf)
+library(ggplot2)
+library(ggspatial)
+
+# Replace with your actual token and form ID
+kobo_token <- Sys.getenv("KOBO_TOKEN")
+
+form_id <- "aDnYgCWxBduEXrC6cFzCP2"  # You can find this in the URL of your form on Kobo (the part after /forms/)
+
+# Define API URL (for KoboToolbox server)
+base_url <- "https://kf.kobotoolbox.org/api/v2/assets/"
+
+# Get data
+response <- GET(
+  paste0(base_url, form_id, "/data.json"),
+  add_headers(Authorization = paste("Token", kobo_token))
+)
+
+# Parse JSON
+data_list <- content(response, as = "parsed", simplifyDataFrame = TRUE)
+
+# Convert to dataframe
+kobo_data <- as.data.frame(data_list$results)
+
+# Assume your Kobo data frame is called kobo_data
+names(kobo_data) <- names(kobo_data) %>%
+  sub(".*/", "", .) %>%   # remove everything before the last "/"
+  sub("^_", "", .)        # remove leading underscore if present
+
+kobo_data <- kobo_data %>%
+  select(-any_of("uuid"))%>%
+  mutate(start_time = ymd_hms(start_time, tz = "UTC"))%>%
+  mutate(end_time = ymd_hms(end_time, tz = "UTC"))%>%
+  filter(as.character(month) == params$selected_month)%>%
+  filter(consent == "yes")  # Filter for consented responses
+
+# Convert variable types based on ODK form structure
+kobo_data <- kobo_data %>%
+  mutate(
+    # Convert integer variables
+    percent_women_gatherers = as.integer(percent_women_gatherers),
+    
+    # Convert decimal variables
+    price_per_jerrycan = as.numeric(price_per_jerrycan),
+    price_per_month = as.numeric(price_per_month)
+  )
+
+# Convert all factors with proper levels and labels
+kobo_data <- kobo_data %>%
+  mutate(
+    surveyor_name = factor(surveyor_name,
+                          levels = c("abdulaib", "abdulaik", "boboieh", "jamiatu", "musa", "joana", "other"),
+                          labels = c("Abdulai B", "Abdulai K", "Boboieh", "Jamiatu", "Musa", "Joana", "Other")),
+    
+    # community
+    community = factor(community,
+                      levels = c("cockle_bay", "dworzark", "portee_rokupa"),
+                      labels = c("Cockle Bay", "Dworzark", "Portee Rokupa")),
+    
+    # cocklezone
+    cocklezone = factor(cocklezone,
+                       levels = c("inlet_view", "jay_matta", "kola_stick", "mafengbeh"),
+                       labels = c("Inlet View", "Jay Matta", "Kola Stick", "Mafengbeh")),
+    
+    # porteezone
+    porteezone = factor(porteezone,
+                       levels = c("benk", "mefleh", "portee_wharf", "rokupa_wharf"),
+                       labels = c("Benk", "Mefleh", "Portee Wharf", "Rokupa Wharf")),
+    
+    # dworzarkzone
+    dworzarkzone = factor(dworzarkzone,
+                         levels = c("argentina", "brazil", "cameroon", "england", "france", 
+                                   "germany", "holland", "italy", "morocco", "nigeria", 
+                                   "spain", "usa"),
+                         labels = c("Argentina", "Brazil", "Cameroon", "England", "France",
+                                   "Germany", "Holland", "Italy", "Morocco", "Nigeria",
+                                   "Spain", "USA")),
+    
+    # consent
+    consent = factor(consent,
+                    levels = c("yes", "no"),
+                    labels = c("Yes", "No")),
+    
+    # water_source_type
+    water_source_type = factor(water_source_type,
+                               levels = c("open_well", "closed_well", "private_tap", "public_tap",
+                                         "surface_water", "spring", "tank", "rainfall"),
+                               labels = c("Open Well", "Closed Well", "Private Tap", "Public Tap",
+                                         "Surface Water", "Spring", "Tank", "Rainfall")),
+    
+    # manager_gender
+    manager_gender = factor(manager_gender,
+                           levels = c("male", "female", "mixed"),
+                           labels = c("Male", "Female", "Mixed")),
+    
+    # owner_type
+    owner_type = factor(owner_type,
+                       levels = c("individual", "household", "committee", "organization"),
+                       labels = c("Individual", "Household", "Committee", "Organization")),
+    
+    # funder
+    funder = factor(funder,
+                   levels = c("household_self", "community", "fcc", "national_gov",
+                             "freetown_ngo", "international_ngo"),
+                   labels = c("Household/self", "Community", "FCC", "National Government",
+                             "Freetown-based NGO", "International NGO")),
+    
+    # users_per_day
+    users_per_day = factor(users_per_day,
+                          levels = c("0_to_10", "10_to_20", "20_to_50", "50_to_100",
+                                    "100_to_200", "200_to_300", "300_to_500", 
+                                    "500_to_1000", "1000+"),
+                          labels = c("0 to 10", "10 to 20", "20 to 50", "50 to 100",
+                                    "100 to 200", "200 to 300", "300 to 500",
+                                    "500 to 1000", "1000+")),
+    
+    # access_rights
+    access_rights = factor(access_rights,
+                          levels = c("household_only", "friends_family", "community", "anybody"),
+                          labels = c("Household", "Close friends and family", "Community", "Anybody")),
+    
+    # days_per_week
+    days_per_week = factor(days_per_week,
+                          levels = c("7_days", "4_6_days", "2_3_days", "1_day", "less_than_weekly"),
+                          labels = c("7 days per week", "4-6 days per week", "2-3 days per week",
+                                    "1 day per week", "Less than weekly")),
+    
+    # daily_schedule
+    daily_schedule = factor(daily_schedule,
+                           levels = c("all_day", "twice_day", "three_times", "random"),
+                           labels = c("All day", "Twice a day", "Three times a day", 
+                                     "Randomly throughout day")),
+    
+    # opening_time
+    opening_time = factor(opening_time,
+                         levels = c("1am", "2am", "3am", "4am", "5am", "6am", "7am", "8am",
+                                   "9am", "10am", "11am", "afternoon", "evening"),
+                         labels = c("1am", "2am", "3am", "4am", "5am", "6am", "7am", "8am",
+                                   "9am", "10am", "11am", "Afternoon", "Evening")),
+    
+    # is_potable
+    is_potable = factor(is_potable,
+                       levels = c("1", "0", "unknown"),
+                       labels = c("Yes", "No", "Unknown")),
+    
+    # treatment_frequency
+    treatment_frequency = factor(treatment_frequency,
+                                levels = c("daily", "weekly", "monthly", "less_than_monthly", "never"),
+                                labels = c("Daily", "Weekly", "Monthly", "Less than Monthly", "Never")),
+    
+    # price_change
+    price_change = factor(price_change,
+                         levels = c("1", "0"),
+                         labels = c("Yes", "No")),
+    
+    # source_age
+    source_age = factor(source_age,
+                       levels = c("6months", "6to12months", "1to5years", "5to10years",
+                                 "10to20years", "20plusyears"),
+                       labels = c("Less than 6 Months", "6 months to one year", "1 to 5 years",
+                                 "5 to 10", "10 to 20", "20+ years")),
+    
+    # month
+    month = factor(month,
+                  levels = c("november", "december", "january", "february", "march", "april",
+                            "may", "june", "july", "august", "september", "october"),
+                  labels = c("November", "December", "January", "February", "March", "April",
+                            "May", "June", "July", "August", "September", "October")),
+    
+    # quoting
+    quoting = factor(quoting,
+                    levels = c("no", "no_name", "with_name", "no_quotes"),
+                    labels = c("No", "Yes, but don't use my name", 
+                              "Yes, and you can use my name too.", "No useful quotes")),
+    # Consolidate zone columns
+    zone = coalesce(cocklezone, porteezone, dworzarkzone)
+  )%>%
+  select(-cocklezone, -porteezone, -dworzarkzone)%>%
+  relocate(zone, .after = community)%>%
+  mutate(
+    price_per_jerrycan = as.numeric(price_per_jerrycan),
+    price_per_month = as.numeric(price_per_month),
+    percent_women_gatherers = as.numeric(percent_women_gatherers)
+  )%>%
+  select(-c(consent,picture_consent,`_version__`, audit, instanceID,instanceName, xform_id_string, rootUuid, status, geolocation, submission_time, tags, notes, submitted_by, source_ID, quoting:end))
+```
+
+## Manual Data Corrections
+
+```{r}
+# Abdulai B - 1762865226663.jpg
+kobo_data[kobo_data$source_photo == "1762865226663.jpg", "construction_cost"] <- NA
+kobo_data[kobo_data$source_photo == "1762865226663.jpg", "funder"] <- NA
+kobo_data[kobo_data$source_photo == "1762865226663.jpg", "manager_gender"] <- NA
+kobo_data[kobo_data$source_photo == "1762865226663.jpg", "owner_type"] <- NA
+kobo_data[kobo_data$source_photo == "1762865226663.jpg", "source_age"] <- NA
+
+# Abdulai B - 1762867432898.jpg
+kobo_data[kobo_data$source_photo == "1762867432898.jpg", "construction_cost"] <- NA
+
+# Abdulai B - 1762870443737.jpg
+kobo_data[kobo_data$source_photo == "1762870443737.jpg", "daily_schedule"] <- NA
+kobo_data[kobo_data$source_photo == "1762870443737.jpg", "days_per_week"] <- NA
+kobo_data[kobo_data$source_photo == "1762870443737.jpg", "opening_time"] <- NA
+
+# Abdulai B - 1763030485469.jpg
+kobo_data[kobo_data$source_photo == "1763030485469.jpg", "zone"] <- "Portee Wharf"
+
+# Abdulai K - 1762856519831.jpg
+kobo_data[kobo_data$source_photo == "1762856519831.jpg", "access_rights"] <- NA
+kobo_data[kobo_data$source_photo == "1762856519831.jpg", "price_change"] <- NA
+kobo_data[kobo_data$source_photo == "1762856519831.jpg", "price_per_jerrycan"] <- NA
+kobo_data[kobo_data$source_photo == "1762856519831.jpg", "price_per_month"] <- NA
+
+# Abdulai K - 1762956342305.jpg
+kobo_data[kobo_data$source_photo == "1762956342305.jpg", "access_rights"] <- NA
+kobo_data[kobo_data$source_photo == "1762956342305.jpg", "price_change"] <- NA
+kobo_data[kobo_data$source_photo == "1762956342305.jpg", "price_per_jerrycan"] <- NA
+kobo_data[kobo_data$source_photo == "1762956342305.jpg", "price_per_month"] <- NA
+
+# Jamiatu - 1762854513791.jpg
+kobo_data[kobo_data$source_photo == "1762854513791.jpg", "community"] <- "Dworzark"
+kobo_data[kobo_data$source_photo == "1762854513791.jpg", "respondent_name"] <- NA
+kobo_data[kobo_data$source_photo == "1762854513791.jpg", "zone"] <- "Nigeria"
+
+# Jamiatu - 1763029369673.jpg
+kobo_data[kobo_data$source_photo == "1763029369673.jpg", "construction_cost"] <- NA
+kobo_data[kobo_data$source_photo == "1763029369673.jpg", "funder"] <- NA
+kobo_data[kobo_data$source_photo == "1763029369673.jpg", "manager_gender"] <- NA
+kobo_data[kobo_data$source_photo == "1763029369673.jpg", "owner_type"] <- NA
+kobo_data[kobo_data$source_photo == "1763029369673.jpg", "percent_women_gatherers"] <- NA
+kobo_data[kobo_data$source_photo == "1763029369673.jpg", "price_per_jerrycan"] <- NA
+kobo_data[kobo_data$source_photo == "1763029369673.jpg", "price_per_month"] <- NA
+kobo_data[kobo_data$source_photo == "1763029369673.jpg", "source_age"] <- NA
+
+# Jamiatu - 1763118663989.jpg
+kobo_data[kobo_data$source_photo == "1763118663989.jpg", "opening_time"] <- NA
+
+# Musa - 1762853482960.jpg
+kobo_data[kobo_data$source_photo == "1762853482960.jpg", "manager_gender"] <- "Mafengbeh"
+
+# Musa - 1762856784217.jpg
+kobo_data[kobo_data$source_photo == "1762856784217.jpg", "respondent_name"] <- NA
+
+# Musa - 1762865592920.jpg
+kobo_data[kobo_data$source_photo == "1762865592920.jpg", "access_rights"] <- NA
+kobo_data[kobo_data$source_photo == "1762865592920.jpg", "price_change"] <- NA
+kobo_data[kobo_data$source_photo == "1762865592920.jpg", "price_per_jerrycan"] <- NA
+kobo_data[kobo_data$source_photo == "1762865592920.jpg", "price_per_month"] <- NA
+
+# Musa - 1762867216335.jpg
+kobo_data[kobo_data$source_photo == "1762867216335.jpg", "access_rights"] <- NA
+kobo_data[kobo_data$source_photo == "1762867216335.jpg", "price_change"] <- NA
+kobo_data[kobo_data$source_photo == "1762867216335.jpg", "price_per_jerrycan"] <- NA
+kobo_data[kobo_data$source_photo == "1762867216335.jpg", "price_per_month"] <- NA
+
+# Joana - 1762855960522.jpg
+kobo_data[kobo_data$source_photo == "1762855960522.jpg", "price_change"] <- "No"
+```
+
+## Surveyor Statistics
+
+```{r}
+# Create daily survey counts
+daily_surveys <- kobo_data %>%
+  mutate(
+    start_time = as.POSIXct(start_time),
+    survey_date = as.Date(start_time),
+    day_name = weekdays(survey_date)
+  ) %>%
+  group_by(surveyor_name, day_name) %>%
+  summarise(n_surveys = n(), .groups = 'drop') %>%
+  mutate(day_name = ifelse(is.na(day_name), "NA", day_name)) %>%
+  pivot_wider(names_from = day_name, values_from = n_surveys, values_fill = 0)
+
+# Separate NA column if it exists
+if("NA" %in% names(daily_surveys)) {
+  na_col <- daily_surveys %>% select(surveyor_name, `NA`)
+  daily_surveys <- daily_surveys %>% select(-`NA`)
+} else {
+  na_col <- NULL
+}
+
+# Add NA column back before calculating Total
+if(!is.null(na_col)) {
+  daily_surveys <- daily_surveys %>%
+    left_join(na_col, by = "surveyor_name")
+}
+
+# Calculate total (now includes NA if it exists)
+daily_surveys <- daily_surveys %>%
+  mutate(Total = rowSums(select(., -surveyor_name), na.rm = TRUE))
+
+# Create total row
+total_row <- daily_surveys %>%
+  summarise(across(where(is.numeric), sum, na.rm = TRUE)) %>%
+  mutate(surveyor_name = "TOTAL", .before = 1)
+
+# Combine and display
+daily_surveys_with_total <- bind_rows(daily_surveys, total_row)
+
+daily_surveys_with_total %>%
+  kable(align = c("l", rep("c", ncol(.) - 1))) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+## Community Statistics
+
+```{r}
+# Create daily survey counts by community
+daily_surveys <- kobo_data %>%
+  mutate(
+    start_time = as.POSIXct(start_time),
+    survey_date = as.Date(start_time),
+    day_name = weekdays(survey_date)
+  ) %>%
+  group_by(community, day_name) %>%
+  summarise(n_surveys = n(), .groups = 'drop') %>%
+  mutate(day_name = ifelse(is.na(day_name), "NA", day_name)) %>%
+  pivot_wider(names_from = day_name, values_from = n_surveys, values_fill = 0)
+
+# Define the correct order of days
+day_order <- c("Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "Monday")
+
+# Reorder columns
+existing_days <- intersect(day_order, names(daily_surveys))
+other_cols <- setdiff(names(daily_surveys), c("community", day_order))
+
+daily_surveys <- daily_surveys %>%
+  select(community, all_of(existing_days), all_of(other_cols))
+
+# Separate NA column if it exists
+if("NA" %in% names(daily_surveys)) {
+  na_col <- daily_surveys %>% select(community, `NA`)
+  daily_surveys <- daily_surveys %>% select(-`NA`)
+} else {
+  na_col <- NULL
+}
+
+# Add NA column back before calculating Total
+if(!is.null(na_col)) {
+  daily_surveys <- daily_surveys %>%
+    left_join(na_col, by = "community")
+}
+
+# Calculate total (now includes NA if it exists)
+daily_surveys <- daily_surveys %>%
+  mutate(Total = rowSums(select(., -community), na.rm = TRUE))
+
+# Create total row
+total_row <- daily_surveys %>%
+  summarise(across(where(is.numeric), sum, na.rm = TRUE)) %>%
+  mutate(community = "TOTAL", .before = 1)
+
+# Combine and display
+daily_surveys_with_total <- bind_rows(daily_surveys, total_row)
+
+daily_surveys_with_total %>%
+  kable(align = c("l", rep("c", ncol(.) - 1))) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+## Mapping Source Type
+
+```{r}
+# Read the shapefiles
+cockle_shapefile <- st_read("shapefiles/CockleBay.shp")
+portee_shapefile <- st_read("shapefiles/PorteeRokupa.shp")
+dworzark_shapefile <- st_read("shapefiles/Dworzark.shp")
+
+# Filter data for each community and convert to sf object
+cockle_sources <- kobo_data %>%
+  filter(community == "Cockle Bay", !is.na(gps_location)) %>%
+  separate(gps_location, into = c("latitude", "longitude", "altitude", "accuracy"), 
+           sep = " ", remove = FALSE, convert = TRUE) %>%
+  filter(!is.na(latitude), !is.na(longitude)) %>%
+  st_as_sf(coords = c("longitude", "latitude"), crs = 4326)
+
+portee_sources <- kobo_data %>%
+  filter(community == "Portee Rokupa", !is.na(gps_location)) %>%
+  separate(gps_location, into = c("latitude", "longitude", "altitude", "accuracy"), 
+           sep = " ", remove = FALSE, convert = TRUE) %>%
+  filter(!is.na(latitude), !is.na(longitude)) %>%
+  st_as_sf(coords = c("longitude", "latitude"), crs = 4326)
+
+dworzark_sources <- kobo_data %>%
+  filter(community == "Dworzark", !is.na(gps_location)) %>%
+  separate(gps_location, into = c("latitude", "longitude", "altitude", "accuracy"), 
+           sep = " ", remove = FALSE, convert = TRUE) %>%
+  filter(!is.na(latitude), !is.na(longitude)) %>%
+  st_as_sf(coords = c("longitude", "latitude"), crs = 4326)
+
+# Define colors
+source_colors <- c(
+  "Open Well" = "#D2B48C",
+  "Closed Well" = "#5C4033",
+  "Private Tap" = "#FFB6C1",
+  "Public Tap" = "#DC143C",
+  "Spring" = "#4682B4",
+  "Tank" = "#FFFFFF"
+)
+
+# Create labels with counts for Cockle Bay
+cockle_counts <- cockle_sources %>%
+  st_drop_geometry() %>%
+  count(water_source_type) %>%
+  mutate(label = paste0(water_source_type, " (n=", n, ")"))
+cockle_labels <- setNames(cockle_counts$label, cockle_counts$water_source_type)
+
+# Cockle Bay map
+ggplot() +
+  annotation_map_tile(type = "osm", zoomin = 0) +
+  geom_sf(data = cockle_shapefile, fill = NA, color = "black", linewidth = 1) +
+  geom_sf(data = cockle_sources, aes(fill = water_source_type), 
+          size = 3, shape = 21, color = "black", stroke = 1) +
+  scale_fill_manual(values = source_colors, labels = cockle_labels) +
+  labs(title = "Water Sources in Cockle Bay", fill = "Source Type") +
+  theme_minimal() +
+  theme(axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        axis.title = element_blank())
+
+# Create labels with counts for Portee Rokupa
+portee_counts <- portee_sources %>%
+  st_drop_geometry() %>%
+  count(water_source_type) %>%
+  mutate(label = paste0(water_source_type, " (n=", n, ")"))
+portee_labels <- setNames(portee_counts$label, portee_counts$water_source_type)
+
+# Portee Rokupa map
+ggplot() +
+  annotation_map_tile(type = "osm", zoomin = 0) +
+  geom_sf(data = portee_shapefile, fill = NA, color = "black", linewidth = 1) +
+  geom_sf(data = portee_sources, aes(fill = water_source_type), 
+          size = 3, shape = 21, color = "black", stroke = 1) +
+  scale_fill_manual(values = source_colors, labels = portee_labels) +
+  labs(title = "Water Sources in Portee Rokupa", fill = "Source Type") +
+  theme_minimal() +
+  theme(axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        axis.title = element_blank())
+
+# Create labels with counts for Dworzark
+dworzark_counts <- dworzark_sources %>%
+  st_drop_geometry() %>%
+  count(water_source_type) %>%
+  mutate(label = paste0(water_source_type, " (n=", n, ")"))
+dworzark_labels <- setNames(dworzark_counts$label, dworzark_counts$water_source_type)
+
+# Dworzark map
+ggplot() +
+  annotation_map_tile(type = "osm", zoomin = 0) +
+  geom_sf(data = dworzark_shapefile, fill = NA, color = "black", linewidth = 1) +
+  geom_sf(data = dworzark_sources, aes(fill = water_source_type), 
+          size = 3, shape = 21, color = "black", stroke = 1) +
+  scale_fill_manual(values = source_colors, labels = dworzark_labels) +
+  labs(title = "Water Sources in Dworzark", fill = "Source Type") +
+  theme_minimal() +
+  theme(axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        axis.title = element_blank())
+```
+
+## Mapping Source Date
+
+```{r}
+# Filter data for each community and convert to sf object
+cockle_sources <- kobo_data %>%
+  filter(community == "Cockle Bay", !is.na(gps_location)) %>%
+  separate(gps_location, into = c("latitude", "longitude", "altitude", "accuracy"), 
+           sep = " ", remove = FALSE, convert = TRUE) %>%
+  filter(!is.na(latitude), !is.na(longitude)) %>%
+  mutate(
+    survey_date = as.Date(start_time),
+    day_name = factor(weekdays(survey_date), 
+                     levels = c("Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "Monday"))
+  ) %>%
+  st_as_sf(coords = c("longitude", "latitude"), crs = 4326)
+
+portee_sources <- kobo_data %>%
+  filter(community == "Portee Rokupa", !is.na(gps_location)) %>%
+  separate(gps_location, into = c("latitude", "longitude", "altitude", "accuracy"), 
+           sep = " ", remove = FALSE, convert = TRUE) %>%
+  filter(!is.na(latitude), !is.na(longitude)) %>%
+  mutate(
+    survey_date = as.Date(start_time),
+    day_name = factor(weekdays(survey_date), 
+                     levels = c("Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "Monday"))
+  ) %>%
+  st_as_sf(coords = c("longitude", "latitude"), crs = 4326)
+
+dworzark_sources <- kobo_data %>%
+  filter(community == "Dworzark", !is.na(gps_location)) %>%
+  separate(gps_location, into = c("latitude", "longitude", "altitude", "accuracy"), 
+           sep = " ", remove = FALSE, convert = TRUE) %>%
+  filter(!is.na(latitude), !is.na(longitude)) %>%
+  mutate(
+    survey_date = as.Date(start_time),
+    day_name = factor(weekdays(survey_date), 
+                     levels = c("Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "Monday"))
+  ) %>%
+  st_as_sf(coords = c("longitude", "latitude"), crs = 4326)
+
+# Define day colors
+day_colors <- c(
+  "Tuesday" = "#9370DB",    # Purple
+  "Wednesday" = "#4169E1",  # Blue
+  "Thursday" = "#32CD32",   # Green
+  "Friday" = "#FFD700",     # Yellow
+  "Saturday" = "#FF8C00",   # Orange
+  "Sunday" = "#FF0000",     # Red
+  "Monday" = "#808080"      # Gray
+)
+
+# Function to create labels with counts for all days
+create_day_labels <- function(sources_data) {
+  day_levels <- c("Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "Monday")
+  counts <- sources_data %>%
+    st_drop_geometry() %>%
+    count(day_name, .drop = FALSE)
+  
+  all_days <- data.frame(day_name = factor(day_levels, levels = day_levels))
+  counts_full <- left_join(all_days, counts, by = "day_name") %>%
+    mutate(n = replace_na(n, 0),
+           label = paste0(as.character(day_name), " (n=", n, ")"))
+  
+  setNames(counts_full$label, as.character(counts_full$day_name))
+}
+
+# Create labels for each community
+cockle_labels <- create_day_labels(cockle_sources)
+portee_labels <- create_day_labels(portee_sources)
+dworzark_labels <- create_day_labels(dworzark_sources)
+
+# Cockle Bay map
+ggplot() +
+  annotation_map_tile(type = "osm", zoomin = 0) +
+  geom_sf(data = cockle_shapefile, fill = NA, color = "black", linewidth = 1) +
+  geom_sf(data = cockle_sources, aes(fill = day_name), 
+          size = 3, shape = 21, color = "black", stroke = 1) +
+  scale_fill_manual(values = day_colors, labels = cockle_labels, 
+                    breaks = c("Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "Monday"),
+                    drop = FALSE) +
+  labs(title = "Water Sources in Cockle Bay", fill = "Day Mapped") +
+  theme_minimal() +
+  theme(axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        axis.title = element_blank())
+
+# Portee Rokupa map
+ggplot() +
+  annotation_map_tile(type = "osm", zoomin = 0) +
+  geom_sf(data = portee_shapefile, fill = NA, color = "black", linewidth = 1) +
+  geom_sf(data = portee_sources, aes(fill = day_name), 
+          size = 3, shape = 21, color = "black", stroke = 1) +
+  scale_fill_manual(values = day_colors, labels = portee_labels,
+                    breaks = c("Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "Monday"),
+                    drop = FALSE) +
+  labs(title = "Water Sources in Portee Rokupa", fill = "Day Mapped") +
+  theme_minimal() +
+  theme(axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        axis.title = element_blank())
+
+# Dworzark map
+ggplot() +
+  annotation_map_tile(type = "osm", zoomin = 0) +
+  geom_sf(data = dworzark_shapefile, fill = NA, color = "black", linewidth = 1) +
+  geom_sf(data = dworzark_sources, aes(fill = day_name), 
+          size = 3, shape = 21, color = "black", stroke = 1) +
+  scale_fill_manual(values = day_colors, labels = dworzark_labels,
+                    breaks = c("Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "Monday"),
+                    drop = FALSE) +
+  labs(title = "Water Sources in Dworzark", fill = "Day Mapped") +
+  theme_minimal() +
+  theme(axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        axis.title = element_blank())
+```
+
+## Missing Data Output Table
+```{r}
+# Select variables from surveyor_name to percent_women_gatherers plus source_photo
+missing_data <- kobo_data %>%
+  select(surveyor_name, uuid, source_photo, community, zone, water_source_type, surveyor_name:percent_women_gatherers) %>%
+  # Create indicators for missing values (NA or blank)
+  mutate(across(surveyor_name:percent_women_gatherers, 
+                ~if_else(is.na(.) | . == "", "Missing", "Present"),
+                .names = "{.col}_status")) %>%
+  # Keep only the status columns plus surveyor_name, uuid, source_photo, community, zone, water_source_type
+  select(surveyor_name, uuid, source_photo, community, zone, water_source_type, ends_with("_status")) %>%
+  # Pivot longer to get one row per variable per observation
+  pivot_longer(cols = ends_with("_status"),
+               names_to = "variable",
+               values_to = "status") %>%
+  # Clean up variable names
+  mutate(variable = str_remove(variable, "_status")) %>%
+  # Filter to only missing values
+  filter(status == "Missing") %>%
+  # Remove status column
+  select(-status) %>%
+  # Group by surveyor, uuid, source_photo, community, zone, water_source_type
+  group_by(surveyor_name, uuid, source_photo, community, zone, water_source_type) %>%
+  summarise(missing_variables = paste(variable, collapse = ", "), .groups = "drop") %>%
+  arrange(surveyor_name, uuid)
+
+# Construct the photo path using the same logic as the download code
+missing_data <- missing_data %>%
+  mutate(
+    safe_filename = ifelse(!is.na(source_photo),
+                          paste0(
+                            gsub(" ", "", community), "_",
+                            gsub(" ", "", zone), "_",
+                            gsub(" ", "", water_source_type), "_",
+                            source_photo
+                          ),
+                          NA),
+    photo_path = ifelse(!is.na(safe_filename),
+                       file.path("water_source_photos_resized", safe_filename),
+                       NA)
+  )
+
+# Create the table with embedded images
+missing_data %>%
+  mutate(
+    photo_display = ifelse(!is.na(photo_path) & file.exists(photo_path),
+                          paste0("![](", photo_path, "){width=100px}"),
+                          "No photo")
+  ) %>%
+  select(surveyor_name, uuid, photo_display, missing_variables) %>%
+  kable(col.names = c("Surveyor", "UUID", "Photo", "Missing Variables"),
+        escape = FALSE) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+## Process Photos for HH Survey
+
+```{r}
+# Function to extract photo download URL from attachments
+extract_photo_url <- function(attachments_list, photo_filename) {
+  if (is.null(attachments_list) || length(attachments_list) == 0) return(NA)
+  photo_row <- attachments_list[attachments_list$media_file_basename == photo_filename, ]
+  if (nrow(photo_row) > 0) return(photo_row$download_url[1]) else return(NA)
+}
+
+# Combined download and resize function
+download_and_resize_photo <- function(row, max_pixels = 1024) {
+  url <- row$download_url
+  filename <- row$source_photo
+  community <- row$community
+  zone <- row$zone
+  water_type <- row$water_source_type
+  
+  if (is.na(url)) return(list(filename = NA, status = "No URL"))
+  
+  # Create safe filename
+  safe_filename <- paste0(
+    gsub(" ", "", community), "_",
+    gsub(" ", "", zone), "_",
+    gsub(" ", "", water_type), "_",
+    filename
+  )
+  
+  resized_path <- file.path("water_source_photos_resized", safe_filename)
+  
+  # Skip if resized file already exists
+  if (file.exists(resized_path)) {
+    return(list(filename = safe_filename, status = "Already exists"))
+  }
+  
+  tryCatch({
+    # Download to temporary file
+    temp_file <- tempfile(fileext = ".jpg")
+    response <- GET(url,
+                    add_headers(Authorization = paste("Token", kobo_token)),
+                    write_disk(temp_file, overwrite = TRUE))
+    
+    if (status_code(response) != 200) {
+      return(list(filename = safe_filename, status = paste("Download failed:", status_code(response))))
+    }
+    
+    # Resize directly from temp file
+    img <- image_read(temp_file)
+    info <- image_info(img)
+    
+    # Calculate new dimensions
+    if (info$width > info$height) {
+      new_width <- max_pixels
+      new_height <- round(info$height * (max_pixels / info$width))
+    } else {
+      new_height <- max_pixels
+      new_width <- round(info$width * (max_pixels / info$height))
+    }
+    
+    # Resize and save
+    img_resized <- image_resize(img, paste0(new_width, "x", new_height))
+    image_write(img_resized, resized_path, quality = 85)
+    
+    # Clean up temp file
+    unlink(temp_file)
+    
+    return(list(filename = safe_filename, status = "Success"))
+    
+  }, error = function(e) {
+    return(list(filename = safe_filename, status = paste("Error:", e$message)))
+  })
+}
+
+# Create directories
+dir.create("water_source_photos_resized", showWarnings = FALSE)
+
+# Prepare sources with download URLs
+sources_with_photos <- kobo_data %>%
+  filter(!is.na(source_photo)) %>%
+  select(id, uuid, water_source_type, community, zone, source_photo, attachments) %>%
+  rowwise() %>%
+  mutate(download_url = extract_photo_url(attachments, source_photo)) %>%
+  ungroup() %>%
+  select(-attachments)
+
+# Download and resize in one step
+message("Downloading and resizing photos...")
+results <- sources_with_photos %>%
+  rowwise() %>%
+  mutate(result = list(download_and_resize_photo(cur_data()))) %>%
+  ungroup() %>%
+  mutate(
+    local_filename = sapply(result, function(x) x$filename),
+    download_status = sapply(result, function(x) x$status)
+  ) %>%
+  select(-result)
+
+# Summary
+status_summary <- table(results$download_status)
+print(status_summary)
+
+# Filter successful results
+sources_with_photos <- results %>%
+  filter(download_status %in% c("Success", "Already exists"))
+
+# Create Excel list
+photo_list_for_excel <- sources_with_photos %>%
+  mutate(
+    list_name = "water_sources",
+    name = uuid,
+    label = paste0(water_source_type, " - ", zone, " - ", community),
+    category = case_when(
+      community == "Cockle Bay" ~ "cockle",
+      community == "Dworzark" ~ "dworzark",
+      community == "Portee Rokupa" ~ "portee"
+    ),
+    image = local_filename
+  ) %>%
+  select(list_name, name, label, category, image)
+
+write.csv(photo_list_for_excel, "water_sources_for_excel.csv", row.names = FALSE)
+
+message(paste("Complete! Processed", nrow(sources_with_photos), "photos"))
+```
+
+## Missing Data Correction Code
+
+```{r}
+# Get all missing data entries (NA or blank)
+missing_data_detailed <- kobo_data %>%
+  select(surveyor_name, uuid, source_photo, surveyor_name:percent_women_gatherers) %>%
+  # Create indicators for missing values (NA or blank)
+  mutate(across(surveyor_name:percent_women_gatherers, 
+                ~if_else(is.na(.) | . == "", "Missing", "Present"),
+                .names = "{.col}_status")) %>%
+  # Keep only the status columns plus surveyor_name, uuid, and source_photo
+  select(surveyor_name, uuid, source_photo, ends_with("_status")) %>%
+  # Pivot longer to get one row per variable per observation
+  pivot_longer(cols = ends_with("_status"),
+               names_to = "variable",
+               values_to = "status") %>%
+  # Clean up variable names
+  mutate(variable = str_remove(variable, "_status")) %>%
+  # Filter to only missing values
+  filter(status == "Missing") %>%
+  arrange(surveyor_name, source_photo, variable)
+
+# Generate all the correction lines with surveyor name headers
+missing_data_detailed %>%
+  group_by(surveyor_name, source_photo) %>%
+  summarise(
+    correction_code = paste(
+      paste0('kobo_data[kobo_data$source_photo == "', source_photo, '", "', variable, '"] <- NA'),
+      collapse = "\n"
+    ),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    output = paste0("# ", surveyor_name, " - ", source_photo, "\n", correction_code)
+  ) %>%
+  pull(output) %>%
+  cat(sep = "\n\n")
+```
+
+# Analysis
+
+## Source Type
+```{r}
+# Count of each source type by community
+source_type_by_community <- kobo_data %>%
+  group_by(community, water_source_type) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  pivot_wider(names_from = community, values_from = count, values_fill = 0) %>%
+  mutate(Total = rowSums(select(., -water_source_type), na.rm = TRUE))
+
+# Calculate percentages for each community (columns sum to 100%)
+source_type_percentages <- source_type_by_community %>%
+  mutate(across(-water_source_type, ~{
+    col_total <- sum(.)
+    paste0(., " (", round(. / col_total * 100, 1), "%)")
+  }))
+
+# Add total row
+total_row <- source_type_by_community %>%
+  summarise(across(where(is.numeric), sum, na.rm = TRUE)) %>%
+  mutate(water_source_type = "TOTAL", .before = 1) %>%
+  mutate(across(where(is.numeric), ~paste0(., " (100.0%)")))
+
+# Combine and display
+source_type_by_community_with_total <- bind_rows(source_type_percentages, total_row)
+
+source_type_by_community_with_total %>%
+  kable(align = c("l", rep("c", ncol(.) - 1))) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+## Manager Gender
+
+```{r}
+# Count of manager gender by community
+manager_gender_by_community <- kobo_data %>%
+  mutate(manager_gender = factor(manager_gender, levels = c("Male", "Female", "Mixed"))) %>%
+  group_by(community, manager_gender, .drop = FALSE) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  pivot_wider(names_from = community, values_from = count, values_fill = 0) %>%
+  mutate(Total = rowSums(select(., -manager_gender), na.rm = TRUE)) %>%
+  arrange(manager_gender)
+
+# Calculate percentages for each community
+manager_gender_percentages <- manager_gender_by_community %>%
+  mutate(across(where(is.numeric), ~paste0(., " (", round(. / sum(.) * 100, 1), "%)")))
+
+# Add total row
+total_row <- manager_gender_by_community %>%
+  summarise(across(where(is.numeric), sum, na.rm = TRUE)) %>%
+  mutate(manager_gender = "TOTAL", .before = 1) %>%
+  mutate(across(where(is.numeric), ~paste0(., " (100.0%)")))
+
+# Combine and display
+manager_gender_with_total <- bind_rows(manager_gender_percentages, total_row)
+
+manager_gender_with_total %>%
+  kable(align = c("l", rep("c", ncol(.) - 1))) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+## Owner Type
+
+```{r}
+# Count of owner type by community
+owner_type_by_community <- kobo_data %>%
+  mutate(owner_type = factor(owner_type, levels = c("Individual", "Household", "Committee", "Organization"))) %>%
+  group_by(community, owner_type, .drop = FALSE) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  pivot_wider(names_from = community, values_from = count, values_fill = 0) %>%
+  mutate(Total = rowSums(select(., -owner_type), na.rm = TRUE)) %>%
+  arrange(owner_type)
+
+# Calculate percentages for each community
+owner_type_percentages <- owner_type_by_community %>%
+  mutate(across(where(is.numeric), ~paste0(., " (", round(. / sum(.) * 100, 1), "%)")))
+
+# Add total row
+total_row <- owner_type_by_community %>%
+  summarise(across(where(is.numeric), sum, na.rm = TRUE)) %>%
+  mutate(owner_type = "TOTAL", .before = 1) %>%
+  mutate(across(where(is.numeric), ~paste0(., " (100.0%)")))
+
+# Combine and display
+owner_type_with_total <- bind_rows(owner_type_percentages, total_row)
+
+owner_type_with_total %>%
+  kable(align = c("l", rep("c", ncol(.) - 1))) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+## Source Age
+
+
+
+## Funder
+
+```{r}
+# Count of funder by community
+funder_by_community <- kobo_data %>%
+  mutate(funder = factor(funder, levels = c("Household/self", "Community", "FCC", "National Government", "Freetown-based NGO", "International NGO"))) %>%
+  group_by(community, funder, .drop = FALSE) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  pivot_wider(names_from = community, values_from = count, values_fill = 0) %>%
+  mutate(Total = rowSums(select(., -funder), na.rm = TRUE)) %>%
+  arrange(funder)
+
+# Calculate percentages for each community (columns sum to 100%)
+funder_percentages <- funder_by_community %>%
+  mutate(across(-funder, ~{
+    col_total <- sum(.)
+    paste0(., " (", round(. / col_total * 100, 1), "%)")
+  }))
+
+# Add total row
+total_row <- funder_by_community %>%
+  summarise(across(where(is.numeric), sum, na.rm = TRUE)) %>%
+  mutate(funder = "TOTAL", .before = 1) %>%
+  mutate(across(where(is.numeric), ~paste0(., " (100.0%)")))
+
+# Combine and display
+funder_with_total <- bind_rows(funder_percentages, total_row)
+
+funder_with_total %>%
+  kable(align = c("l", rep("c", ncol(.) - 1))) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+## User Per Day
+
+```{r}
+# Count of users per day by community
+users_per_day_by_community <- kobo_data %>%
+  mutate(users_per_day = factor(users_per_day, levels = c("0 to 10", "10 to 20", "20 to 50", "50 to 100", "100 to 200", "200 to 300", "300 to 500", "500 to 1000", "1000+"))) %>%
+  group_by(community, users_per_day, .drop = FALSE) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  pivot_wider(names_from = community, values_from = count, values_fill = 0) %>%
+  mutate(Total = rowSums(select(., -users_per_day), na.rm = TRUE)) %>%
+  arrange(users_per_day)
+
+# Calculate percentages for each community (columns sum to 100%)
+users_per_day_percentages <- users_per_day_by_community %>%
+  mutate(across(-users_per_day, ~{
+    col_total <- sum(.)
+    paste0(., " (", round(. / col_total * 100, 1), "%)")
+  }))
+
+# Add total row
+total_row <- users_per_day_by_community %>%
+  summarise(across(where(is.numeric), sum, na.rm = TRUE)) %>%
+  mutate(users_per_day = "TOTAL", .before = 1) %>%
+  mutate(across(where(is.numeric), ~paste0(., " (100.0%)")))
+
+# Combine and display
+users_per_day_with_total <- bind_rows(users_per_day_percentages, total_row)
+
+users_per_day_with_total %>%
+  kable(align = c("l", rep("c", ncol(.) - 1))) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+## Access Rights
+
+```{r}
+# Count of access rights by community
+access_rights_by_community <- kobo_data %>%
+  mutate(access_rights = factor(access_rights, levels = c("Household", "Close friends and family", "Community", "Anybody"))) %>%
+  group_by(community, access_rights, .drop = FALSE) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  pivot_wider(names_from = community, values_from = count, values_fill = 0) %>%
+  mutate(Total = rowSums(select(., -access_rights), na.rm = TRUE)) %>%
+  arrange(access_rights)
+
+# Calculate percentages for each community (columns sum to 100%)
+access_rights_percentages <- access_rights_by_community %>%
+  mutate(across(-access_rights, ~{
+    col_total <- sum(.)
+    paste0(., " (", round(. / col_total * 100, 1), "%)")
+  }))
+
+# Add total row
+total_row <- access_rights_by_community %>%
+  summarise(across(where(is.numeric), sum, na.rm = TRUE)) %>%
+  mutate(access_rights = "TOTAL", .before = 1) %>%
+  mutate(across(where(is.numeric), ~paste0(., " (100.0%)")))
+
+# Combine and display
+access_rights_with_total <- bind_rows(access_rights_percentages, total_row)
+
+access_rights_with_total %>%
+  kable(align = c("l", rep("c", ncol(.) - 1))) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+## Price Per Jerry Can
+
+```{r fig.width=10, fig.height=8}
+library(gridExtra)
+
+# Create histogram for each community
+cockle_plot <- kobo_data %>%
+  filter(community == "Cockle Bay", !is.na(price_per_jerrycan)) %>%
+  ggplot(aes(x = price_per_jerrycan)) +
+  geom_histogram(bins = 20, fill = "steelblue", color = "black") +
+  labs(title = paste0("Cockle Bay (n=", sum(!is.na(kobo_data$price_per_jerrycan[kobo_data$community == "Cockle Bay"])), ")"),
+       x = "Price per Jerrycan",
+       y = "Frequency") +
+  theme_minimal()
+
+portee_plot <- kobo_data %>%
+  filter(community == "Portee Rokupa", !is.na(price_per_jerrycan)) %>%
+  ggplot(aes(x = price_per_jerrycan)) +
+  geom_histogram(bins = 20, fill = "steelblue", color = "black") +
+  labs(title = paste0("Portee Rokupa (n=", sum(!is.na(kobo_data$price_per_jerrycan[kobo_data$community == "Portee Rokupa"])), ")"),
+       x = "Price per Jerrycan",
+       y = "Frequency") +
+  theme_minimal()
+
+dworzark_plot <- kobo_data %>%
+  filter(community == "Dworzark", !is.na(price_per_jerrycan)) %>%
+  ggplot(aes(x = price_per_jerrycan)) +
+  geom_histogram(bins = 20, fill = "steelblue", color = "black") +
+  labs(title = paste0("Dworzark (n=", sum(!is.na(kobo_data$price_per_jerrycan[kobo_data$community == "Dworzark"])), ")"),
+       x = "Price per Jerrycan",
+       y = "Frequency") +
+  theme_minimal()
+
+total_plot <- kobo_data %>%
+  filter(!is.na(price_per_jerrycan)) %>%
+  ggplot(aes(x = price_per_jerrycan)) +
+  geom_histogram(bins = 20, fill = "steelblue", color = "black") +
+  labs(title = paste0("Total (n=", sum(!is.na(kobo_data$price_per_jerrycan)), ")"),
+       x = "Price per Jerrycan",
+       y = "Frequency") +
+  theme_minimal()
+
+# Arrange in 2x2 grid
+grid.arrange(cockle_plot, portee_plot, dworzark_plot, total_plot, ncol = 2)
+```
+
+## Price Change
+
+```{r}
+# Count of price change by community
+price_change_by_community <- kobo_data %>%
+  mutate(price_change = factor(price_change, levels = c("Yes", "No"))) %>%
+  group_by(community, price_change, .drop = FALSE) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  pivot_wider(names_from = community, values_from = count, values_fill = 0) %>%
+  mutate(Total = rowSums(select(., -price_change), na.rm = TRUE)) %>%
+  arrange(price_change)
+
+# Calculate percentages for each community (columns sum to 100%)
+price_change_percentages <- price_change_by_community %>%
+  mutate(across(-price_change, ~{
+    col_total <- sum(.)
+    paste0(., " (", round(. / col_total * 100, 1), "%)")
+  }))
+
+# Add total row
+total_row <- price_change_by_community %>%
+  summarise(across(where(is.numeric), sum, na.rm = TRUE)) %>%
+  mutate(price_change = "TOTAL", .before = 1) %>%
+  mutate(across(where(is.numeric), ~paste0(., " (100.0%)")))
+
+# Combine and display
+price_change_with_total <- bind_rows(price_change_percentages, total_row)
+
+price_change_with_total %>%
+  kable(align = c("l", rep("c", ncol(.) - 1))) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+## Days Per Week
+
+```{r}
+# Count of days per week by community
+days_per_week_by_community <- kobo_data %>%
+  mutate(days_per_week = factor(days_per_week, levels = c("7 days per week", "4-6 days per week", "2-3 days per week", "1 day per week", "Less than weekly"))) %>%
+  group_by(community, days_per_week, .drop = FALSE) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  pivot_wider(names_from = community, values_from = count, values_fill = 0) %>%
+  mutate(Total = rowSums(select(., -days_per_week), na.rm = TRUE)) %>%
+  arrange(days_per_week)
+
+# Calculate percentages for each community (columns sum to 100%)
+days_per_week_percentages <- days_per_week_by_community %>%
+  mutate(across(-days_per_week, ~{
+    col_total <- sum(.)
+    paste0(., " (", round(. / col_total * 100, 1), "%)")
+  }))
+
+# Add total row
+total_row <- days_per_week_by_community %>%
+  summarise(across(where(is.numeric), sum, na.rm = TRUE)) %>%
+  mutate(days_per_week = "TOTAL", .before = 1) %>%
+  mutate(across(where(is.numeric), ~paste0(., " (100.0%)")))
+
+# Combine and display
+days_per_week_with_total <- bind_rows(days_per_week_percentages, total_row)
+
+days_per_week_with_total %>%
+  kable(align = c("l", rep("c", ncol(.) - 1))) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+## Daily Schedule
+
+```{r}
+# Count of daily schedule by community
+daily_schedule_by_community <- kobo_data %>%
+  mutate(daily_schedule = factor(daily_schedule, levels = c("All day", "Twice a day", "Three times a day", "Randomly throughout day"))) %>%
+  group_by(community, daily_schedule, .drop = FALSE) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  pivot_wider(names_from = community, values_from = count, values_fill = 0) %>%
+  mutate(Total = rowSums(select(., -daily_schedule), na.rm = TRUE)) %>%
+  arrange(daily_schedule)
+
+# Calculate percentages for each community (columns sum to 100%)
+daily_schedule_percentages <- daily_schedule_by_community %>%
+  mutate(across(-daily_schedule, ~{
+    col_total <- sum(.)
+    paste0(., " (", round(. / col_total * 100, 1), "%)")
+  }))
+
+# Add total row
+total_row <- daily_schedule_by_community %>%
+  summarise(across(where(is.numeric), sum, na.rm = TRUE)) %>%
+  mutate(daily_schedule = "TOTAL", .before = 1) %>%
+  mutate(across(where(is.numeric), ~paste0(., " (100.0%)")))
+
+# Combine and display
+daily_schedule_with_total <- bind_rows(daily_schedule_percentages, total_row)
+
+daily_schedule_with_total %>%
+  kable(align = c("l", rep("c", ncol(.) - 1))) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+## Opening time
+
+```{r}
+# Count of opening time by community
+opening_time_by_community <- kobo_data %>%
+  mutate(opening_time = factor(opening_time, levels = c("1am", "2am", "3am", "4am", "5am", "6am", "7am", "8am", "9am", "10am", "11am", "Afternoon", "Evening"))) %>%
+  group_by(community, opening_time, .drop = FALSE) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  pivot_wider(names_from = community, values_from = count, values_fill = 0) %>%
+  mutate(Total = rowSums(select(., -opening_time), na.rm = TRUE)) %>%
+  arrange(opening_time)
+
+# Calculate percentages for each community (columns sum to 100%)
+opening_time_percentages <- opening_time_by_community %>%
+  mutate(across(-opening_time, ~{
+    col_total <- sum(.)
+    paste0(., " (", round(. / col_total * 100, 1), "%)")
+  }))
+
+# Add total row
+total_row <- opening_time_by_community %>%
+  summarise(across(where(is.numeric), sum, na.rm = TRUE)) %>%
+  mutate(opening_time = "TOTAL", .before = 1) %>%
+  mutate(across(where(is.numeric), ~paste0(., " (100.0%)")))
+
+# Combine and display
+opening_time_with_total <- bind_rows(opening_time_percentages, total_row)
+
+opening_time_with_total %>%
+  kable(align = c("l", rep("c", ncol(.) - 1))) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+## Is Potable
+
+```{r}
+# Count of is potable by community
+is_potable_by_community <- kobo_data %>%
+  mutate(is_potable = factor(is_potable, levels = c("Yes", "No", "Unknown"))) %>%
+  group_by(community, is_potable, .drop = FALSE) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  pivot_wider(names_from = community, values_from = count, values_fill = 0) %>%
+  mutate(Total = rowSums(select(., -is_potable), na.rm = TRUE)) %>%
+  arrange(is_potable)
+
+# Calculate percentages for each community (columns sum to 100%)
+is_potable_percentages <- is_potable_by_community %>%
+  mutate(across(-is_potable, ~{
+    col_total <- sum(.)
+    paste0(., " (", round(. / col_total * 100, 1), "%)")
+  }))
+
+# Add total row
+total_row <- is_potable_by_community %>%
+  summarise(across(where(is.numeric), sum, na.rm = TRUE)) %>%
+  mutate(is_potable = "TOTAL", .before = 1) %>%
+  mutate(across(where(is.numeric), ~paste0(., " (100.0%)")))
+
+# Combine and display
+is_potable_with_total <- bind_rows(is_potable_percentages, total_row)
+
+is_potable_with_total %>%
+  kable(align = c("l", rep("c", ncol(.) - 1))) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+## Treatment Frequency
+
+```{r}
+# Count of treatment frequency by community
+treatment_frequency_by_community <- kobo_data %>%
+  mutate(treatment_frequency = factor(treatment_frequency, levels = c("Daily", "Weekly", "Monthly", "Less than Monthly", "Never"))) %>%
+  group_by(community, treatment_frequency, .drop = FALSE) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  pivot_wider(names_from = community, values_from = count, values_fill = 0) %>%
+  mutate(Total = rowSums(select(., -treatment_frequency), na.rm = TRUE)) %>%
+  arrange(treatment_frequency)
+
+# Calculate percentages for each community (columns sum to 100%)
+treatment_frequency_percentages <- treatment_frequency_by_community %>%
+  mutate(across(-treatment_frequency, ~{
+    col_total <- sum(.)
+    paste0(., " (", round(. / col_total * 100, 1), "%)")
+  }))
+
+# Add total row
+total_row <- treatment_frequency_by_community %>%
+  summarise(across(where(is.numeric), sum, na.rm = TRUE)) %>%
+  mutate(treatment_frequency = "TOTAL", .before = 1) %>%
+  mutate(across(where(is.numeric), ~paste0(., " (100.0%)")))
+
+# Combine and display
+treatment_frequency_with_total <- bind_rows(treatment_frequency_percentages, total_row)
+
+treatment_frequency_with_total %>%
+  kable(align = c("l", rep("c", ncol(.) - 1))) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+## Percent Women Gatherers
+
+```{r fig.width=10, fig.height=8}
+library(gridExtra)
+
+# Create histogram for each community
+cockle_plot <- kobo_data %>%
+  filter(community == "Cockle Bay", !is.na(percent_women_gatherers)) %>%
+  ggplot(aes(x = percent_women_gatherers)) +
+  geom_histogram(bins = 20, fill = "steelblue", color = "black") +
+  labs(title = paste0("Cockle Bay (n=", sum(!is.na(kobo_data$percent_women_gatherers[kobo_data$community == "Cockle Bay"])), ")"),
+       x = "Percentage",
+       y = "Frequency") +
+  theme_minimal()
+
+portee_plot <- kobo_data %>%
+  filter(community == "Portee Rokupa", !is.na(percent_women_gatherers)) %>%
+  ggplot(aes(x = percent_women_gatherers)) +
+  geom_histogram(bins = 20, fill = "steelblue", color = "black") +
+  labs(title = paste0("Portee Rokupa (n=", sum(!is.na(kobo_data$percent_women_gatherers[kobo_data$community == "Portee Rokupa"])), ")"),
+       x = "Percentage",
+       y = "Frequency") +
+  theme_minimal()
+
+dworzark_plot <- kobo_data %>%
+  filter(community == "Dworzark", !is.na(percent_women_gatherers)) %>%
+  ggplot(aes(x = percent_women_gatherers)) +
+  geom_histogram(bins = 20, fill = "steelblue", color = "black") +
+  labs(title = paste0("Dworzark (n=", sum(!is.na(kobo_data$percent_women_gatherers[kobo_data$community == "Dworzark"])), ")"),
+       x = "Percentage",
+       y = "Frequency") +
+  theme_minimal()
+
+total_plot <- kobo_data %>%
+  filter(!is.na(percent_women_gatherers)) %>%
+  ggplot(aes(x = percent_women_gatherers)) +
+  geom_histogram(bins = 20, fill = "steelblue", color = "black") +
+  labs(title = paste0("Total (n=", sum(!is.na(kobo_data$percent_women_gatherers)), ")"),
+       x = "Percentage",
+       y = "Frequency") +
+  theme_minimal()
+
+# Arrange in 2x2 grid
+grid.arrange(cockle_plot, portee_plot, dworzark_plot, total_plot, ncol = 2)
+```
+

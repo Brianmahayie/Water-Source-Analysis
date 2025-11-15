@@ -1,0 +1,8 @@
+# Ignore everything
+*
+
+# But include these files
+!*.Rmd
+!*.html
+!.gitignore
+!README.md
