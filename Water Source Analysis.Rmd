@@ -390,7 +390,7 @@ daily_surveys_with_total %>%
 
 ## Mapping Source Type
 
-```{r}
+```{r results='hide'}
 # Read the shapefiles
 cockle_shapefile <- st_read("shapefiles/CockleBay.shp")
 portee_shapefile <- st_read("shapefiles/PorteeRokupa.shp")
