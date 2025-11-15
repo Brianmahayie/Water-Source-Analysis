@@ -617,6 +617,7 @@ ggplot() +
 ```
 
 ## Missing Data Output Table
+
 ```{r}
 # Select variables from surveyor_name to percent_women_gatherers plus source_photo
 missing_data <- kobo_data %>%
@@ -669,131 +670,6 @@ missing_data %>%
   kable(col.names = c("Surveyor", "UUID", "Photo", "Missing Variables"),
         escape = FALSE) %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
-```
-
-## Process Photos for HH Survey
-
-```{r}
-# Function to extract photo download URL from attachments
-extract_photo_url <- function(attachments_list, photo_filename) {
-  if (is.null(attachments_list) || length(attachments_list) == 0) return(NA)
-  photo_row <- attachments_list[attachments_list$media_file_basename == photo_filename, ]
-  if (nrow(photo_row) > 0) return(photo_row$download_url[1]) else return(NA)
-}
-
-# Combined download and resize function
-download_and_resize_photo <- function(row, max_pixels = 1024) {
-  url <- row$download_url
-  filename <- row$source_photo
-  community <- row$community
-  zone <- row$zone
-  water_type <- row$water_source_type
-  
-  if (is.na(url)) return(list(filename = NA, status = "No URL"))
-  
-  # Create safe filename
-  safe_filename <- paste0(
-    gsub(" ", "", community), "_",
-    gsub(" ", "", zone), "_",
-    gsub(" ", "", water_type), "_",
-    filename
-  )
-  
-  resized_path <- file.path("water_source_photos_resized", safe_filename)
-  
-  # Skip if resized file already exists
-  if (file.exists(resized_path)) {
-    return(list(filename = safe_filename, status = "Already exists"))
-  }
-  
-  tryCatch({
-    # Download to temporary file
-    temp_file <- tempfile(fileext = ".jpg")
-    response <- GET(url,
-                    add_headers(Authorization = paste("Token", kobo_token)),
-                    write_disk(temp_file, overwrite = TRUE))
-    
-    if (status_code(response) != 200) {
-      return(list(filename = safe_filename, status = paste("Download failed:", status_code(response))))
-    }
-    
-    # Resize directly from temp file
-    img <- image_read(temp_file)
-    info <- image_info(img)
-    
-    # Calculate new dimensions
-    if (info$width > info$height) {
-      new_width <- max_pixels
-      new_height <- round(info$height * (max_pixels / info$width))
-    } else {
-      new_height <- max_pixels
-      new_width <- round(info$width * (max_pixels / info$height))
-    }
-    
-    # Resize and save
-    img_resized <- image_resize(img, paste0(new_width, "x", new_height))
-    image_write(img_resized, resized_path, quality = 85)
-    
-    # Clean up temp file
-    unlink(temp_file)
-    
-    return(list(filename = safe_filename, status = "Success"))
-    
-  }, error = function(e) {
-    return(list(filename = safe_filename, status = paste("Error:", e$message)))
-  })
-}
-
-# Create directories
-dir.create("water_source_photos_resized", showWarnings = FALSE)
-
-# Prepare sources with download URLs
-sources_with_photos <- kobo_data %>%
-  filter(!is.na(source_photo)) %>%
-  select(id, uuid, water_source_type, community, zone, source_photo, attachments) %>%
-  rowwise() %>%
-  mutate(download_url = extract_photo_url(attachments, source_photo)) %>%
-  ungroup() %>%
-  select(-attachments)
-
-# Download and resize in one step
-message("Downloading and resizing photos...")
-results <- sources_with_photos %>%
-  rowwise() %>%
-  mutate(result = list(download_and_resize_photo(cur_data()))) %>%
-  ungroup() %>%
-  mutate(
-    local_filename = sapply(result, function(x) x$filename),
-    download_status = sapply(result, function(x) x$status)
-  ) %>%
-  select(-result)
-
-# Summary
-status_summary <- table(results$download_status)
-print(status_summary)
-
-# Filter successful results
-sources_with_photos <- results %>%
-  filter(download_status %in% c("Success", "Already exists"))
-
-# Create Excel list
-photo_list_for_excel <- sources_with_photos %>%
-  mutate(
-    list_name = "water_sources",
-    name = uuid,
-    label = paste0(water_source_type, " - ", zone, " - ", community),
-    category = case_when(
-      community == "Cockle Bay" ~ "cockle",
-      community == "Dworzark" ~ "dworzark",
-      community == "Portee Rokupa" ~ "portee"
-    ),
-    image = local_filename
-  ) %>%
-  select(list_name, name, label, category, image)
-
-write.csv(photo_list_for_excel, "water_sources_for_excel.csv", row.names = FALSE)
-
-message(paste("Complete! Processed", nrow(sources_with_photos), "photos"))
 ```
 
 ## Missing Data Correction Code

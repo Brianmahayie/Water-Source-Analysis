@@ -6,3 +6,19 @@
 !*.html
 !.gitignore
 !README.md
+
+# Include shapefiles
+!shapefiles/
+!shapefiles/*.shp
+!shapefiles/*.shx
+!shapefiles/*.dbf
+!shapefiles/*.prj
+!shapefiles/*.cpg
+
+# Include GitHub workflows
+!.github/
+!.github/workflows/
+!.github/workflows/*.yml
+
+# Explicitly ignore sensitive files
+.Renviron
