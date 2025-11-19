@@ -122,8 +122,8 @@ kobo_data <- kobo_data %>%
     
     # owner_type
     owner_type = factor(owner_type,
-                       levels = c("individual", "household", "committee", "organization"),
-                       labels = c("Individual", "Household", "Committee", "Organization")),
+                       levels = c("individual", "household", "committee", "organization", "none"),
+                       labels = c("Individual", "Household", "Committee", "Organization", "None")),
     
     # funder
     funder = factor(funder,
@@ -134,10 +134,10 @@ kobo_data <- kobo_data %>%
     
     # users_per_day
     users_per_day = factor(users_per_day,
-                          levels = c("0_to_10", "10_to_20", "20_to_50", "50_to_100",
+                          levels = c("0", "0_to_10", "10_to_20", "20_to_50", "50_to_100",
                                     "100_to_200", "200_to_300", "300_to_500", 
                                     "500_to_1000", "1000+"),
-                          labels = c("0 to 10", "10 to 20", "20 to 50", "50 to 100",
+                          labels = c("0", "1 to 10", "10 to 20", "20 to 50", "50 to 100",
                                     "100 to 200", "200 to 300", "300 to 500",
                                     "500 to 1000", "1000+")),
     
@@ -215,75 +215,119 @@ kobo_data <- kobo_data %>%
 
 ## Manual Data Corrections
 
-```{r}
-# Abdulai B - 1762865226663.jpg
-kobo_data[kobo_data$source_photo == "1762865226663.jpg", "construction_cost"] <- NA
-kobo_data[kobo_data$source_photo == "1762865226663.jpg", "funder"] <- NA
-kobo_data[kobo_data$source_photo == "1762865226663.jpg", "manager_gender"] <- NA
-kobo_data[kobo_data$source_photo == "1762865226663.jpg", "owner_type"] <- NA
-kobo_data[kobo_data$source_photo == "1762865226663.jpg", "source_age"] <- NA
+```{r, eval=T}
+# Corrections:
 
-# Abdulai B - 1762867432898.jpg
-kobo_data[kobo_data$source_photo == "1762867432898.jpg", "construction_cost"] <- NA
-
-# Abdulai B - 1762870443737.jpg
-kobo_data[kobo_data$source_photo == "1762870443737.jpg", "daily_schedule"] <- NA
-kobo_data[kobo_data$source_photo == "1762870443737.jpg", "days_per_week"] <- NA
-kobo_data[kobo_data$source_photo == "1762870443737.jpg", "opening_time"] <- NA
-
-# Abdulai B - 1763030485469.jpg
+# Abdulai B
+kobo_data[kobo_data$source_photo == "1762865226663.jpg", "manager_gender"] <- "Female"
+kobo_data[kobo_data$source_photo == "1762865226663.jpg", "owner_type"] <- "Household"
+kobo_data[kobo_data$source_photo == "1762865226663.jpg", "source_age"] <- "20+ years"
+kobo_data[kobo_data$source_photo == "1762870443737.jpg", "daily_schedule"] <- "All Day"
+kobo_data[kobo_data$source_photo == "1762870443737.jpg", "days_per_week"] <- "7 days per week"
+kobo_data[kobo_data$source_photo == "1762870443737.jpg", "opening_time"] <- "5am"
 kobo_data[kobo_data$source_photo == "1763030485469.jpg", "zone"] <- "Portee Wharf"
+kobo_data[kobo_data$source_photo == "1762870443737.jpg", "daily_schedule"] <- "All day"
 
-# Abdulai K - 1762856519831.jpg
-kobo_data[kobo_data$source_photo == "1762856519831.jpg", "access_rights"] <- NA
-kobo_data[kobo_data$source_photo == "1762856519831.jpg", "price_change"] <- NA
-kobo_data[kobo_data$source_photo == "1762856519831.jpg", "price_per_jerrycan"] <- NA
-kobo_data[kobo_data$source_photo == "1762856519831.jpg", "price_per_month"] <- NA
+# Abdulai K
+kobo_data[kobo_data$source_photo == "1762856519831.jpg", "access_rights"] <- "Anybody"
+kobo_data[kobo_data$source_photo == "1762856519831.jpg", "price_change"] <- "Yes"
+kobo_data[kobo_data$source_photo == "1762856519831.jpg", "price_per_jerrycan"] <- 1
+kobo_data[kobo_data$source_photo == "1762856519831.jpg", "price_per_month"] <- 0
+kobo_data[kobo_data$source_photo == "1762956342305.jpg", "access_rights"] <- "Anybody"
+kobo_data[kobo_data$source_photo == "1762956342305.jpg", "price_change"] <- "No"
+kobo_data[kobo_data$source_photo == "1762956342305.jpg", "price_per_jerrycan"] <- 1
+kobo_data[kobo_data$source_photo == "1762956342305.jpg", "price_per_month"] <- 0
 
-# Abdulai K - 1762956342305.jpg
-kobo_data[kobo_data$source_photo == "1762956342305.jpg", "access_rights"] <- NA
-kobo_data[kobo_data$source_photo == "1762956342305.jpg", "price_change"] <- NA
-kobo_data[kobo_data$source_photo == "1762956342305.jpg", "price_per_jerrycan"] <- NA
-kobo_data[kobo_data$source_photo == "1762956342305.jpg", "price_per_month"] <- NA
-
-# Jamiatu - 1762854513791.jpg
+# Jamiatu
+kobo_data[kobo_data$source_photo == "1762854513791.jpg", "respondent_name"] <- "Ibrahim Jalloh"
 kobo_data[kobo_data$source_photo == "1762854513791.jpg", "community"] <- "Dworzark"
-kobo_data[kobo_data$source_photo == "1762854513791.jpg", "respondent_name"] <- NA
 kobo_data[kobo_data$source_photo == "1762854513791.jpg", "zone"] <- "Nigeria"
+kobo_data[kobo_data$source_photo == "1763118663989.jpg", "opening_time"] <- "7am"
+kobo_data[kobo_data$source_photo == "1763029369673.jpg", "source_age"] <- "20+ years"
+kobo_data[kobo_data$source_photo == "1763029369673.jpg", "manager_gender"] <- "Male"
+kobo_data[kobo_data$source_photo == "1763029369673.jpg", "owner_type"] <- "Committee"
+kobo_data[kobo_data$source_photo == "1763029369673.jpg", "users_per_day"] <- "0"
 
-# Jamiatu - 1763029369673.jpg
-kobo_data[kobo_data$source_photo == "1763029369673.jpg", "construction_cost"] <- NA
-kobo_data[kobo_data$source_photo == "1763029369673.jpg", "funder"] <- NA
-kobo_data[kobo_data$source_photo == "1763029369673.jpg", "manager_gender"] <- NA
-kobo_data[kobo_data$source_photo == "1763029369673.jpg", "owner_type"] <- NA
-kobo_data[kobo_data$source_photo == "1763029369673.jpg", "percent_women_gatherers"] <- NA
-kobo_data[kobo_data$source_photo == "1763029369673.jpg", "price_per_jerrycan"] <- NA
-kobo_data[kobo_data$source_photo == "1763029369673.jpg", "price_per_month"] <- NA
-kobo_data[kobo_data$source_photo == "1763029369673.jpg", "source_age"] <- NA
-
-# Jamiatu - 1763118663989.jpg
-kobo_data[kobo_data$source_photo == "1763118663989.jpg", "opening_time"] <- NA
-
-# Musa - 1762853482960.jpg
-kobo_data[kobo_data$source_photo == "1762853482960.jpg", "manager_gender"] <- "Mafengbeh"
-
-# Musa - 1762856784217.jpg
-kobo_data[kobo_data$source_photo == "1762856784217.jpg", "respondent_name"] <- NA
-
-# Musa - 1762865592920.jpg
-kobo_data[kobo_data$source_photo == "1762865592920.jpg", "access_rights"] <- NA
-kobo_data[kobo_data$source_photo == "1762865592920.jpg", "price_change"] <- NA
-kobo_data[kobo_data$source_photo == "1762865592920.jpg", "price_per_jerrycan"] <- NA
-kobo_data[kobo_data$source_photo == "1762865592920.jpg", "price_per_month"] <- NA
-
-# Musa - 1762867216335.jpg
-kobo_data[kobo_data$source_photo == "1762867216335.jpg", "access_rights"] <- NA
-kobo_data[kobo_data$source_photo == "1762867216335.jpg", "price_change"] <- NA
-kobo_data[kobo_data$source_photo == "1762867216335.jpg", "price_per_jerrycan"] <- NA
-kobo_data[kobo_data$source_photo == "1762867216335.jpg", "price_per_month"] <- NA
-
-# Joana - 1762855960522.jpg
+# Joana
 kobo_data[kobo_data$source_photo == "1762855960522.jpg", "price_change"] <- "No"
+
+# Musa 
+kobo_data[kobo_data$source_photo == "1762853482960.jpg", "manager_gender"] <- "Female"
+kobo_data[kobo_data$source_photo == "1762856784217.jpg", "respondent_name"] <- "Amanda Jones"
+kobo_data[kobo_data$source_photo == "1762865592920.jpg", "access_rights"] <- "Community"
+kobo_data[kobo_data$source_photo == "1762865592920.jpg", "price_change"] <- "No"
+kobo_data[kobo_data$source_photo == "1762865592920.jpg", "price_per_jerrycan"] <- 0
+kobo_data[kobo_data$source_photo == "1762865592920.jpg", "price_per_month"] <- "10"
+kobo_data[kobo_data$source_photo == "1762867216335.jpg", "access_rights"] <- "Community"
+kobo_data[kobo_data$source_photo == "1762867216335.jpg", "price_change"] <- "Yes"
+kobo_data[kobo_data$source_photo == "1762867216335.jpg", "price_per_jerrycan"] <- 0
+kobo_data[kobo_data$source_photo == "1762867216335.jpg", "price_per_month"] <- 0
+
+# Moses
+kobo_data[kobo_data$source_photo == "1763200512880.jpg", "price_change"] <- 0
+kobo_data[kobo_data$source_photo == "1763200512880.jpg", "price_per_jerrycan"] <- 0
+kobo_data[kobo_data$source_photo == "1763200512880.jpg", "price_per_month"] <- 0
+kobo_data[kobo_data$source_photo == "1763202790648.jpg", "price_change"] <- 0
+kobo_data[kobo_data$source_photo == "1763202790648.jpg", "price_per_jerrycan"] <- 0
+kobo_data[kobo_data$source_photo == "1763202790648.jpg", "price_per_month"] <- 0
+kobo_data[kobo_data$source_photo == "1763203566533.jpg", "price_change"] <- 0
+kobo_data[kobo_data$source_photo == "1763203566533.jpg", "price_per_jerrycan"] <- 0
+kobo_data[kobo_data$source_photo == "1763203566533.jpg", "price_per_month"] <- 0
+kobo_data[kobo_data$source_photo == "1763204742486.jpg", "price_change"] <- "No"
+kobo_data[kobo_data$source_photo == "1763204742486.jpg", "price_per_jerrycan"] <- 0
+kobo_data[kobo_data$source_photo == "1763204742486.jpg", "price_per_month"] <- 0
+kobo_data[kobo_data$source_photo == "1763208229214.jpg", "percent_women_gatherers"] <- 60
+kobo_data[kobo_data$source_photo == "1763208229214.jpg", "price_change"] <- "No"
+kobo_data[kobo_data$source_photo == "1763208229214.jpg", "price_per_jerrycan"] <- 0
+kobo_data[kobo_data$source_photo == "1763208229214.jpg", "price_per_month"] <- 0
+kobo_data[kobo_data$source_photo == "1763209899556.jpg", "price_change"] <- "No"
+kobo_data[kobo_data$source_photo == "1763209899556.jpg", "price_per_jerrycan"] <- 0
+kobo_data[kobo_data$source_photo == "1763209899556.jpg", "price_per_month"] <- 0
+kobo_data[kobo_data$source_photo == "1763211388128.jpg", "percent_women_gatherers"] <- 70
+kobo_data[kobo_data$source_photo == "1763211388128.jpg", "price_change"] <- "No"
+kobo_data[kobo_data$source_photo == "1763211388128.jpg", "price_per_jerrycan"] <- 0
+kobo_data[kobo_data$source_photo == "1763211388128.jpg", "price_per_month"] <- 0
+kobo_data[kobo_data$source_photo == "1763212023654.jpg", "percent_women_gatherers"] <- 75
+kobo_data[kobo_data$source_photo == "1763212023654.jpg", "price_change"] <- "No"
+kobo_data[kobo_data$source_photo == "1763212023654.jpg", "price_per_jerrycan"] <- 0
+kobo_data[kobo_data$source_photo == "1763212023654.jpg", "price_per_month"] <- 0
+kobo_data[kobo_data$source_photo == "1763215463057.jpg", "percent_women_gatherers"] <- 80
+kobo_data[kobo_data$source_photo == "1763215463057.jpg", "price_change"] <- "No"
+kobo_data[kobo_data$source_photo == "1763215463057.jpg", "price_per_jerrycan"] <- 0
+kobo_data[kobo_data$source_photo == "1763215463057.jpg", "price_per_month"] <- 0
+kobo_data[kobo_data$source_photo == "1763289940199.jpg", "price_change"] <- "No"
+kobo_data[kobo_data$source_photo == "1763289940199.jpg", "price_per_jerrycan"] <- 0
+kobo_data[kobo_data$source_photo == "1763289940199.jpg", "price_per_month"] <- 0
+kobo_data[kobo_data$source_photo == "1763203995442.jpg", "price_change"] <- "No"
+kobo_data[kobo_data$source_photo == "1763203995442.jpg", "price_per_jerrycan"] <- 0
+kobo_data[kobo_data$source_photo == "1763203995442.jpg", "price_per_month"] <- 0
+kobo_data[kobo_data$source_photo == "1763289940199.jpg", "percent_women_gatherers"] <- 50
+kobo_data[kobo_data$source_photo == "1763200512880.jpg", "percent_women_gatherers"] <- 70
+kobo_data[kobo_data$source_photo == "1763207174198.jpg", "percent_women_gatherers"] <- 70
+
+kobo_data[kobo_data$source_photo == "1763204742486.jpg", "percent_women_gatherers"]
+kobo_data[kobo_data$source_photo == "1763215463057.jpg", "respondent_name"]
+kobo_data[kobo_data$source_photo == "1763287530385.jpg", "owner_type"]
+kobo_data[kobo_data$source_photo == "1763287530385.jpg", "respondent_name"]
+kobo_data[kobo_data$source_photo == "1763200512880.jpg",]# "price_change"]
+	
+
+# Joseph 
+kobo_data[kobo_data$source_photo == "1763210997150.jpg", "price_change"] <- "No"
+kobo_data[kobo_data$source_photo == "1763210997150.jpg", "price_per_jerrycan"] <- 0
+kobo_data[kobo_data$source_photo == "1763210997150.jpg", "price_per_month"] <- 0
+kobo_data[kobo_data$source_photo == "1763205423836.jpg", "owner_type"] <- "None"
+kobo_data[kobo_data$source_photo == "1763295731653.jpg", "users_per_day"] <- "50 to 100"
+kobo_data[kobo_data$source_photo == "1763203048324.jpg", "percent_women_gatherers"] <- 80
+kobo_data[kobo_data$source_photo == "1763210997150.jpg", "percent_women_gatherers"] <- 80
+kobo_data[kobo_data$source_photo == "1763215236980.jpg", "percent_women_gatherers"] <- 80
+
+
+kobo_data[kobo_data$source_photo == "1763029369673.jpg", "funder"]
+kobo_data[kobo_data$source_photo == "1763029369673.jpg", "percent_women_gatherers"]
+kobo_data[kobo_data$source_photo == "1763029369673.jpg", "price_per_jerrycan"]
+kobo_data[kobo_data$source_photo == "1763029369673.jpg", "price_per_month"]
+
 ```
 
 ## Surveyor Statistics
@@ -611,13 +655,13 @@ ggplot() +
 ```{r}
 # Select variables from surveyor_name to percent_women_gatherers plus source_photo
 missing_data <- kobo_data %>%
-  select(surveyor_name, uuid, source_photo, community, zone, water_source_type, surveyor_name:percent_women_gatherers) %>%
+  select(surveyor_name, uuid, source_photo, community, zone, water_source_type, surveyor_name:percent_women_gatherers, -construction_cost) %>%
   # Create indicators for missing values (NA or blank)
   mutate(across(surveyor_name:percent_women_gatherers, 
                 ~if_else(is.na(.) | . == "", "Missing", "Present"),
                 .names = "{.col}_status")) %>%
   # Keep only the status columns plus surveyor_name, uuid, source_photo, community, zone, water_source_type
-  select(surveyor_name, uuid, source_photo, community, zone, water_source_type, ends_with("_status")) %>%
+  select(surveyor_name,uuid, source_photo, community, zone, water_source_type, ends_with("_status")) %>%
   # Pivot longer to get one row per variable per observation
   pivot_longer(cols = ends_with("_status"),
                names_to = "variable",
@@ -656,7 +700,7 @@ missing_data %>%
                           paste0("![](", photo_path, "){width=100px}"),
                           "No photo")
   ) %>%
-  select(surveyor_name, uuid, photo_display, missing_variables) %>%
+  select(surveyor_name, source_photo, photo_display, missing_variables) %>%
   kable(col.names = c("Surveyor", "UUID", "Photo", "Missing Variables"),
         escape = FALSE) %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
@@ -686,6 +730,124 @@ missing_data_detailed <- kobo_data %>%
 
 # Generate all the correction lines with surveyor name headers
 missing_data_detailed %>%
+  group_by(surveyor_name, source_photo) %>%
+  summarise(
+    correction_code = paste(
+      paste0('kobo_data[kobo_data$source_photo == "', source_photo, '", "', variable, '"] <- NA'),
+      collapse = "\n"
+    ),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    output = paste0("# ", surveyor_name, " - ", source_photo, "\n", correction_code)
+  ) %>%
+  pull(output) %>%
+  cat(sep = "\n\n")
+```
+
+## Outliers Output Table
+```{r}
+# Define exclusions
+exclusions <- tribble(
+  ~source_photo, ~variable,
+  "1762865226663.jpg", "funder",
+  "1763211609931.jpg", "percent_women_gatherers",
+  "1762937610913.jpg", "percent_women_gatherers",
+  "1762856007203.jpg", "percent_women_gatherers",
+  "1763308469124.jpg", "percent_women_gatherers",
+  "1763308969945.jpg", "percent_women_gatherers",
+  "1763202790648.jpg", "percent_women_gatherers"
+)
+
+# Get numeric variables from the dataset
+num_vars <- kobo_data %>%
+  select(surveyor_name:percent_women_gatherers) %>%
+  select(where(is.numeric)) %>%
+  names()
+
+# Calculate outliers (outside 2 SD) for each numeric variable
+outliers_detailed <- kobo_data %>%
+  select(surveyor_name, uuid, source_photo, community, zone, water_source_type, all_of(num_vars)) %>%
+  pivot_longer(cols = all_of(num_vars),
+               names_to = "variable",
+               values_to = "value") %>%
+  filter(!is.na(value)) %>%
+  filter(!(variable %in% c("price_per_month", "price_per_jerrycan") & value == 0)) %>%
+  group_by(variable) %>%
+  mutate(
+    mean_val = mean(value, na.rm = TRUE),
+    sd_val = sd(value, na.rm = TRUE),
+    lower_bound = mean_val - 2 * sd_val,
+    upper_bound = mean_val + 2 * sd_val,
+    is_outlier = value < lower_bound | value > upper_bound
+  ) %>%
+  ungroup() %>%
+  filter(is_outlier) %>%
+  anti_join(exclusions, by = c("source_photo", "variable")) %>%
+  mutate(
+    safe_filename = ifelse(!is.na(source_photo),
+                          paste0(
+                            gsub(" ", "", community), "_",
+                            gsub(" ", "", zone), "_",
+                            gsub(" ", "", water_source_type), "_",
+                            source_photo
+                          ),
+                          NA),
+    photo_path = ifelse(!is.na(safe_filename),
+                       file.path("water_source_photos_resized", safe_filename),
+                       NA),
+    photo_display = ifelse(!is.na(photo_path) & file.exists(photo_path),
+                          paste0("![](", photo_path, "){width=100px}"),
+                          "No photo")
+  )
+
+# Create summary table
+outliers_summary <- outliers_detailed %>%
+  group_by(surveyor_name, variable) %>%
+  summarise(outlier_count = n(), .groups = "drop") %>%
+  pivot_wider(names_from = variable, values_from = outlier_count, values_fill = 0) %>%
+  mutate(Total = rowSums(select(., -surveyor_name), na.rm = TRUE))
+
+outliers_summary %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+
+# Create detailed outlier table with embedded images
+outliers_detailed %>%
+  select(surveyor_name, source_photo, photo_display, water_source_type, variable, value, mean_val) %>%
+  arrange(surveyor_name, source_photo, variable) %>%
+  mutate(mean_val = round(mean_val, 2)) %>%
+  kable(col.names = c("Surveyor", "Photo Name", "Photo", "Water Source Type", "Variable", "Value", "Mean"),
+        escape = FALSE) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+
+## Outliers Data Correction
+```{r}
+# Generate correction code for outliers
+outliers_detailed_for_code <- kobo_data %>%
+  select(surveyor_name, uuid, source_photo, community, zone, water_source_type, all_of(num_vars)) %>%
+  pivot_longer(cols = all_of(num_vars),
+               names_to = "variable",
+               values_to = "value") %>%
+  filter(!is.na(value)) %>%
+  filter(!(variable %in% c("price_per_month", "price_per_jerrycan") & value == 0)) %>%
+  group_by(variable) %>%
+  mutate(
+    mean_val = mean(value, na.rm = TRUE),
+    sd_val = sd(value, na.rm = TRUE),
+    lower_bound = mean_val - 2 * sd_val,
+    upper_bound = mean_val + 2 * sd_val,
+    is_outlier = value < lower_bound | value > upper_bound
+  ) %>%
+  ungroup() %>%
+  filter(is_outlier) %>%
+  anti_join(exclusions, by = c("source_photo", "variable")) %>%
+  arrange(surveyor_name, source_photo, variable)
+
+# Generate all the correction lines with surveyor name headers
+outliers_detailed_for_code %>%
   group_by(surveyor_name, source_photo) %>%
   summarise(
     correction_code = paste(
